@@ -1,0 +1,63 @@
+import pandas as pd
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import LinearSVC
+import numpy as np
+
+# We transform the input .csv into a pandas DataFrame
+data=pd.read_csv("prueba.csv")
+
+# Dictionaries to store the publishers information
+pubsdict={}
+pubsdates={}
+
+# We create a sorted list with all the unique dates contained in the report
+uniquedates=sorted([i for i in set(data[list(data)[1]]) if str(i) != "nan"])
+
+# We store the information of Auction Starts and dates per publisher
+# in the dictionaries
+for i in range(0,len(data[list(data)[1]])):
+    if data[list(data)[0]][i] not in pubsdict.keys():
+        pubsdict[data[list(data)[0]][i]]=[data[list(data)[2]][i]]
+        pubsdates[data[list(data)[0]][i]]=[data[list(data)[1]][i]]
+    else:
+        pubsdict[data[list(data)[0]][i]].append(data[list(data)[2]][i])
+        pubsdates[data[list(data)[0]][i]].append(data[list(data)[1]][i])
+
+# If any date is missing in the active report for a specific publisher,
+# we fill both that date and the number of auction starts for that
+# specific publisher. The number of auction starts will be fill with
+# 0 auction starts, since that day there were not any AS registered.
+for i,j in pubsdict.items():
+    while len(j)<len(uniquedates):
+        pubsdict[i].append(0)
+    missingdates=sorted([i for i in (set(uniquedates).difference(set(sorted(list(pubsdates[i])))))])
+    if len(missingdates) >0:
+        for z in missingdates:
+            pubsdict[i].insert(uniquedates.index(z),0)
+            pubsdict[i]=list(pubsdict[i])[0:len(uniquedates)]
+
+# We create a panda data frame by using the dictionaries we have created, where the columns
+# will be the dates.
+pubscleandata=pd.DataFrame.from_dict(pubsdict,orient="index",columns=uniquedates).fillna(0)
+
+# -------------Publisher Classifier--------------------------------------------------------------------
+
+# We import and transform the .csv training data into a Pandas DataFrame
+tradata=pd.read_csv("traini.csv").fillna(0) 
+
+# We define how many features(days) of the training data should be sliced depending on
+# the number of days specified in uniquedates.
+sltradata=int(len(list(tradata)[:-1])-len(uniquedates)) 
+
+# We define the array of training data points and their class labels associated for the classifier, x and y
+x=(np.array(tradata[[i for i in list(tradata)[sltradata:-1]]]))
+y=(np.array(tradata[list(tradata)[len(list(tradata))-1]]))
+
+# We apply the classifier to the input data (totals)
+clasif =LinearSVC(random_state=0, dual=False,loss="squared_hinge",tol=0.0005, max_iter=100000).fit(x, y)
+
+# We merge into a DataFrame both the input data and their class label assignation
+classdata=pd.DataFrame(clasif.predict(np.array(pubscleandata)),index=pubsdict.keys(),columns=["Classification"])
+
+#We export the output of the input classified data to a .csv file
+pd.concat([pubscleandata,classdata],axis=1,sort="False").to_csv("classifieddata.csv")
